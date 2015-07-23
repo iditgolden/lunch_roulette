@@ -118,6 +118,7 @@ def add_user():
     master_user = "idit@taykey.com"
     user_id_10bis = worker.give_master_permissions(email, password, master_user)
     data["user_id_10bis"] = user_id_10bis
+    data["user_name"] = data.get("user_name", email)
     user = es.index(index="users", doc_type="user", body=data)
     return jsonify(**user), 200, None
     
@@ -187,4 +188,4 @@ def make_reservation(_id=""):
     return jsonify(**{}), 200, None    
     
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8888, debug=True)
+    app.run(host="10.10.60.149", port=8888, debug=True)
