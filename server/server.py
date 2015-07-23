@@ -5,7 +5,7 @@ import elasticsearch
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 
 import traceback
-import time
+import time,json
 
 from flask import Flask
 from flask import request
@@ -80,7 +80,19 @@ def get_game_from_es(_id=None):
         new_games.append(game["_source"])
     return new_games   
 
-    
+ 
+def get_food_from_es(_id=None):
+    if _id:
+        game = es.get(index="foods", doc_type="food", id=_id)
+        game["_source"]["id"] = game["_id"]
+        return game["_source"]
+    new_games = []
+    games = es.search(index="foods",body={"query":{"match_all":{}}})["hits"]["hits"]
+    for game in games:
+        game["_source"]["id"] = game["_id"]
+        new_games.append(game["_source"])
+    return new_games   
+   
 
 @app.route('/food/add/',methods=['GET', 'POST'])
 def add_food():
@@ -90,17 +102,29 @@ def add_food():
     food = es.index(index="foods", doc_type="food", body=data)
     return jsonify(**food), 200, None
 
+@app.route('/food/update',methods=['GET', 'POST'])
+@app.route('/food/update/',methods=['GET', 'POST'])
+@app.route('/food/update/<path:_id>',methods=['GET', 'POST'])
+@app.route('/food/update/<path:_id>/',methods=['GET', 'POST'])
+def update_food(_id=""):
+    data = request.data
+    if request.form:
+        data = request.form.keys()[0]
+    if not _id:
+        _id = data['id']
+    if not _id:
+        raise Exception("failed to get the id. must supply id as path or in body")
+    
+    food = get_food_from_es(_id)
+    food.update(json.loads(data))
+    food = es.index(index="foods", doc_type="food", body=food, id=_id)
+    return jsonify(**food), 200, None
 
 
 @app.route('/food/',methods=['GET'])
 def get_food():
-    new_foods = []
-    foods = es.search(index="foods", body={"query":{"match_all":{}}})["hits"]["hits"]  
-    for food in foods:
-        food["_source"]["id"] = food["_id"]
-        new_foods.append(food["_source"])
-    
-    return jsonify(**{"data":new_foods}), 200, None
+    foods = get_food_from_es()
+    return jsonify(**{"data":foods}), 200, None
 
 
 @app.route('/user/add/',methods=['GET', 'POST'])
