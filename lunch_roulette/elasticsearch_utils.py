@@ -37,6 +37,18 @@ def update_game(game):
     es.index(index="games", doc_type="game", id=game['id'], body=game)
     return game
 
+def get_user_from_es(_id=None):
+    if _id:
+        user = es.get(index="users", doc_type="user", id=_id)
+        user["_source"]["id"] = user["_id"]
+        return user["_source"]
+
+    new_users = []
+    users = es.search(index="users", body={"query":{"match_all":{}}})["hits"]["hits"]  
+    for user in users:
+        user["_source"]["id"] = user["_id"]
+        new_users.append(user["_source"])
+    return new_users
 
 def get_game_from_es(_id=None):
     if _id:

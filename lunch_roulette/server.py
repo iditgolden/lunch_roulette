@@ -2,7 +2,7 @@
 import sys
 import os
 import elasticsearch
-from lunch_roulette.elasticsearch_utils import update_game
+from lunch_roulette.elasticsearch_utils import update_game, get_user_from_es
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 import worker
 import traceback
@@ -121,20 +121,35 @@ def add_user():
     user = es.index(index="users", doc_type="user", body=data)
     return jsonify(**user), 200, None
     
+
+@app.route('/user/update/<path:_id>',methods=['GET', 'POST'])
+def update_user(_id=""):
+    
+    data = request.data
+    if request.form:
+        data = request.form.keys()[0]
+        data = json.loads(data)
+        
+    if not _id:
+        _id = data['id']
+    if not _id:
+        raise Exception("failed to get the id. must supply id as path or in body")
+    
+    user = get_user_from_es(_id)
+    user.update(data)
+    user = es.index(index="users", doc_type="usre", body=user, id=_id)
+    return jsonify(**user), 200, None
+
+    
     
 @app.route('/user/',methods=['GET', 'POST'])
 @app.route('/user/<path:_id>',methods=['GET'])
 def get_user(_id=""):
     if _id:
-        user = es.get(index="users", doc_type="user", id=_id)
-        return jsonify(**user["_source"]), 200, None
+        user = get_user_from_es(_id)
+        return jsonify(**user), 200, None
 
-    new_users = []
-    users = es.search(index="users", body={"query":{"match_all":{}}})["hits"]["hits"]  
-    for user in users:
-        user["_source"]["id"] = user["_id"]
-        new_users.append(user["_source"])
-    
+    new_users = get_user_from_es()
     return jsonify(**{"data":new_users}), 200, None
     
 
