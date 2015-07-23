@@ -2,10 +2,11 @@
 import sys
 import os
 import elasticsearch
+from lunch_roulette.elasticsearch_utils import update_game
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
-
+import worker
 import traceback
-import time
+import time,json
 
 from flask import Flask
 from flask import request
@@ -14,6 +15,7 @@ from flask import jsonify
 from flask import Response
 from flask import stream_with_context
 from flask import make_response
+import draw
 
 import requests
 import functools
@@ -21,7 +23,7 @@ import functools
 app = Flask(__name__)
 
 from elasticsearch import Elasticsearch
-
+from elasticsearch_utils import get_game_from_es, get_food_from_es
 
 es = Elasticsearch("10.20.5.53:9200")
 @app.route('/')
@@ -49,7 +51,7 @@ def join_game():
     participents = game.get('participents_ids',[])
     participents.append(user_id)
     game['participents_ids'] = sorted(list(set(participents)))
-    es.index(index="games", doc_type="game", id=game['id'], body=game)
+    update_game(game)
     return jsonify(**game), 200, None
 
     
@@ -66,21 +68,8 @@ def get_game(_id=""):
     return jsonify(**{"data":games}), 200, None
 
 
-def get_game_from_es(_id=None):
-    if _id:
-        game = es.get(index="games", doc_type="game", id=_id)
-        game["_source"]["id"] = game["_id"]
-        game["_source"]["food"] = es.get(index="foods",doc_type="food", id=game["_source"]['food_id'])['_source']
-        return game["_source"]
-    new_games = []
-    games = es.search(index="games",body={"query":{"match_all":{}}})["hits"]["hits"]
-    for game in games:
-        game["_source"]["id"] = game["_id"]
-        game["_source"]["food"] = es.get(index="foods",doc_type="food", id=game["_source"]['food_id'])['_source']
-        new_games.append(game["_source"])
-    return new_games   
 
-    
+   
 
 @app.route('/food/add/',methods=['GET', 'POST'])
 def add_food():
@@ -90,17 +79,29 @@ def add_food():
     food = es.index(index="foods", doc_type="food", body=data)
     return jsonify(**food), 200, None
 
+@app.route('/food/update',methods=['GET', 'POST'])
+@app.route('/food/update/',methods=['GET', 'POST'])
+@app.route('/food/update/<path:_id>',methods=['GET', 'POST'])
+@app.route('/food/update/<path:_id>/',methods=['GET', 'POST'])
+def update_food(_id=""):
+    data = request.data
+    if request.form:
+        data = request.form.keys()[0]
+    if not _id:
+        _id = data['id']
+    if not _id:
+        raise Exception("failed to get the id. must supply id as path or in body")
+    
+    food = get_food_from_es(_id)
+    food.update(json.loads(data))
+    food = es.index(index="foods", doc_type="food", body=food, id=_id)
+    return jsonify(**food), 200, None
 
 
 @app.route('/food/',methods=['GET'])
 def get_food():
-    new_foods = []
-    foods = es.search(index="foods", body={"query":{"match_all":{}}})["hits"]["hits"]  
-    for food in foods:
-        food["_source"]["id"] = food["_id"]
-        new_foods.append(food["_source"])
-    
-    return jsonify(**{"data":new_foods}), 200, None
+    foods = get_food_from_es()
+    return jsonify(**{"data":foods}), 200, None
 
 
 @app.route('/user/add/',methods=['GET', 'POST'])
@@ -108,6 +109,15 @@ def add_user():
     data = request.data
     if request.form:
         data = request.form.keys()[0]
+        data = json.loads(data)
+    email = data.get("email")
+    password = data.get("10bis_pass")
+    if not password or not email:
+        raise Exception("must supply 'password' and 'email'")
+    
+    master_user = "idit@taykey.com"
+    user_id_10bis = worker.give_master_permissions(email, password, master_user)
+    data["user_id_10bis"] = user_id_10bis
     user = es.index(index="users", doc_type="user", body=data)
     return jsonify(**user), 200, None
     
@@ -128,7 +138,38 @@ def get_user(_id=""):
     return jsonify(**{"data":new_users}), 200, None
     
 
+
+@app.route('/login' ,methods=['GET', 'POST'])
+@app.route('/login/',methods=['GET','POST'])
+def login(_id=""):
+    email = request.args.get("email")
+    password = request.args.get("password")
     
+    if not password or not email:
+        raise Exception("must supply 'password' and 'email'")
+    print password, email
+    
+    users = es.search(index="users", body={"query":{"term":{"email":email}}})["hits"]["hits"]
+    if not users:
+        raise Exception("wrong email or password (no user)")
+    user = users[0]
+    if user.get("password") != password:
+        raise Exception("wrong email or password (wrong pass)")
+    
+    return jsonify(**user), 200, None
+    
+
+@app.route('/make_draw',methods=['GET', 'POST'])
+@app.route('/make_draw/',methods=['GET', 'POST'])
+def make_draw(_id=""):
+    games = draw.make_draw()
+    return jsonify(**{"games":games}), 200, None
+
+@app.route('/make_reservation',methods=['GET', 'POST'])
+@app.route('/make_reservation/',methods=['GET', 'POST'])
+def make_reservation(_id=""):
+    draw.make_reservation()
+    return jsonify(**{}), 200, None    
     
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8888, debug=True)
