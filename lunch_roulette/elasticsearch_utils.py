@@ -17,7 +17,7 @@ def get_active_about_to_end_games():
     for game in games:
         date = game["_source"]["date"]
         date = datetime.strptime(date, DATE_FORAMT)
-        if game['status'] == "Decided":
+        if game.get('status') in  ["Decided", "Ended"]:
             continue
         if date - timedelta(days=1) < datetime.now():
             games_to_make_draw.append(game)
