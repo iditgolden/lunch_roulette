@@ -137,9 +137,27 @@ def update_user(_id=""):
     
     user = get_user_from_es(_id)
     user.update(data)
-    user = es.index(index="users", doc_type="usre", body=user, id=_id)
+    user = es.index(index="users", doc_type="user", body=user, id=_id)
     return jsonify(**user), 200, None
 
+
+@app.route('/game/update/<path:_id>',methods=['GET', 'POST'])
+def update_game(_id=""):
+    
+    data = request.data
+    if request.form:
+        data = request.form.keys()[0]
+        data = json.loads(data)
+        
+    if not _id:
+        _id = data['id']
+    if not _id:
+        raise Exception("failed to get the id. must supply id as path or in body")
+    
+    game = get_game_from_es(_id)
+    game.update(data)
+    game = es.index(index="games", doc_type="game", body=game, id=_id)
+    return jsonify(**game), 200, None
     
     
 @app.route('/user/',methods=['GET', 'POST'])
@@ -164,13 +182,13 @@ def login(_id=""):
         raise Exception("must supply 'password' and 'email'")
     print password, email
     
-    users = es.search(index="users", body={"query":{"term":{"email":email}}})["hits"]["hits"]
+    users = es.search(index="users", body={"query":{"terms":{"email":[email.split("@")[0],email.split("@")[1]],"minimum_should_match": len(email.split("@"))}}})["hits"]["hits"]
     if not users:
         raise Exception("wrong email or password (no user)")
-    user = users[0]
-    if user.get("password") != password:
+    user = users[0]["_source"]
+    if user.get("10bis_pass") != password:
         raise Exception("wrong email or password (wrong pass)")
-    
+    user["id"] = users[0]["_id"]
     return jsonify(**user), 200, None
     
 
