@@ -19,7 +19,7 @@ def make_draw():
         participents = game.get("participents_ids")
         if len(participents) < 2:
             print "no participents"
-        participents = random.shuffle(participents)[0]
+        random.shuffle(participents)
         winner = participents[0]
         looser = participents[1]
         send_mail()
