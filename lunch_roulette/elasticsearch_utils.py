@@ -20,7 +20,7 @@ def get_active_about_to_end_games():
         if game.get('status') in  ["Decided", "Ended"]:
             continue
         if date - timedelta(days=1) < datetime.now():
-            games_to_make_draw.append(game)
+            games_to_make_draw.append(game["_source"])
     return games_to_make_draw 
 
 
